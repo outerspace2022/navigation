@@ -6,7 +6,7 @@ import numpy as np
 
 from adafruit_lsm6ds.lsm6ds33 import LSM6DS33
 
-fileoutput = "../data2/" + input("Enter Filename: ") + ".txt"
+fileoutput = "../data4/" + input("Enter Filename: ") + ".txt"
 
 
 i2c = board.I2C()  # uses board.SCL and board.SDA

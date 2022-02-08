@@ -4,6 +4,7 @@ import signal
 import sys
 import numpy as np
 import math
+from scipy.spatial.transform import Rotation
 
 # first lengthen bias period
 # second change measurement to take into account gravity
@@ -12,7 +13,8 @@ import math
 
 from adafruit_lsm6ds.lsm6ds33 import LSM6DS33
 
-fileoutput = "../data3/stationary_x_NW_" + input("Enter Filename: ") + ".txt"
+fileoutput = "../data4/integration" + input("Enter Filename: ") + ".txt"
+#the IMU is upside down so gravity is positive 
 GRAV = 9.81
 
 
@@ -25,20 +27,25 @@ PI = math.pi
 
 #gets the IMU measurement subtract gravity and other forces
 def get_measurement():
-    measurement = np.array((time.time()-tstart,) + sox.acceleration + sox.gyro)
-    gravity = np.array((0, GRAV*math.cos(state[4]+(PI/2)), -GRAV*math.cos(state[5]+(PI/2)), GRAV*math.cos(state[6]), 0, 0, 0))
+    
+    rot = Rotation.from_euler('xyz', [state[4], state[5], state[6]], degrees=False)
+    gravity = rot.apply([0, 0, GRAV])
     print("X: " + str((state[4]*180)/PI))
     print("Y: " + str((state[5]*180)/PI))
     print("Z: " + str((state[6]*180)/PI))
     print(gravity)
-    return measurement - gravity
+    print(sox.acceleration)
+
+    acc = tuple(np.array(sox.acceleration) - gravity)
+    print(acc)
+    measurement = np.array((time.time()-tstart,) + acc + sox.gyro)
+    return measurement
     
 
 
 #calibration for ~10 second. KEEP STILL
 calibrationarr = np.empty([0, 7])
 values = get_measurement()
-
 while values[0] < 10:
     calibrationarr = np.vstack((calibrationarr, values))
     values = get_measurement()
