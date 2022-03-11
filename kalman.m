@@ -5,11 +5,11 @@ rng(1337)
 %% Define the initial states
 % Here, we start at position zero with velocity +1m/s and absolute
 % certainty about our initial state
-x0 = [0 1]';
+x0 = [0 0.31]';
 P0 = diag([1e-4, 1e-6]);
 
-dt = .1;  % Update once per second
-t_end = 100;  % Simulate for 100 seconds
+dt = 0.050;  % Update once per 0.050 second (camera freq)
+t_end = 41 * 0.05;  % Simulate for 100 seconds
 
 steps = t_end/dt;
 time = linspace(0,t_end,steps);
@@ -38,13 +38,20 @@ Q = diag(G.^2) * sigma_a^2;
 % Where r_k is drawn from a zero-mean Gaussian with standard deviation
 % sigma_r. The R matrix captures this uncertainty for all sensor inputs.
 % Since we have one sensor here, R is simply a scalar that equals sigma_r^2.
-sigma_r = 0.3;  % [m] Measurement noise standard deviation <-- CHANGE THIS TO MATCH CAMERA STD
+sigma_r = 0.00692412970236608;  % [m] Measurement noise standard deviation <-- CHANGE THIS TO MATCH CAMERA STD
 R = sigma_r^2;
+
+%% Our Code: Read in camera csv data
+ourData = readmatrix("x_pos_data.csv");
+disp(ourData)
 
 %% Run the filter
 %[x_hat, P_hat, time, x_true, z_k] = kalman(dt, t_end, x0, P0, A, H, Q, R);
-x_true = zeros([2,2]);
-x_hat = zeros([2,2]);
+% x_true = zeros([2,2]);
+x_true = [ 0 0
+           0.31 0.31];
+x_hat = [ 0 0
+           0.31 0.31];
 P_hat = zeros([2,2]);
 x_hat_k = zeros([2,2]);
 P_hat_k = zeros([2,2]);
@@ -60,13 +67,19 @@ LQ = chol(Q, 'lower');
 %p_hat is covariance matrix which gets updated every iteration
 for k = 2:numel(time)
     %Propagate the truth state and add noise
-    x_true(:,k) = A*x_true(:,k-1) + LQ*randn(size(x0));
+     disp(x_true(:, k-1))
+
+    x_true(:,k) = A*x_true(:,k-1); % + LQ*randn(size(x0));
+    
+
     %Propagate the filter states
     x_hat_k(:,k) = A*x_hat(:,k-1);
     P_hat_k(:,:,k) = A*P_hat(:,:,k-1)*A' + Q;
     
     %Generate a noisy measurement as a function of our true state
-    z_k(k) = (H*x_true(:,k) - H*x_true(:, k-1)) + LR*randn(size(H,1),1); % <-- CHANGE THIS TO WHATEVER THE CAMERA IS OUTPUTTING
+%     z_k(k) = (H*x_true(:,k) - H*x_true(:, k-1)) + LR*randn(size(H,1),1); % <-- CHANGE THIS TO WHATEVER THE CAMERA IS OUTPUTTING
+    z_k(k) = ourData(k-1); % <-- CHANGE THIS TO WHATEVER THE CAMERA IS OUTPUTTING
+
     z_hat_k = H*x_hat_k(:,k) - H*x_hat_k(:, k-1); %Predicted measurement is our expected position
     y = z_k(k) - z_hat_k;
     
