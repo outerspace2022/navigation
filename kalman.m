@@ -17,7 +17,8 @@ time = linspace(0,t_end,steps);
 %% Define A, H, Q, and R matrices
 A = [1 dt; 
      0 1];
-H = [1 0];
+H_camera = [1 0];
+H_lidar = [1 0];
 
 % Q quantifies the uncertainty added from process noise in the system
 % Recall that our model assumes process noise in the state propagation:
@@ -38,12 +39,15 @@ Q = diag(G.^2) * sigma_a^2;
 % Where r_k is drawn from a zero-mean Gaussian with standard deviation
 % sigma_r. The R matrix captures this uncertainty for all sensor inputs.
 % Since we have one sensor here, R is simply a scalar that equals sigma_r^2.
-sigma_r = 0.00692412970236608;  % [m] Measurement noise standard deviation <-- CHANGE THIS TO MATCH CAMERA STD
-R = sigma_r^2;
+sigma_r_camera = 0.00692412970236608;  % [m] Measurement noise standard deviation <-- CHANGE THIS TO MATCH CAMERA STD
+R_camera = sigma_r_camera^2;
+
+sigma_r_lidar = 0.005; %arbitrary value. change this !!!!
+R_lidar = sigma_r_lidar^2;
 
 %% Our Code: Read in camera csv data
 ourData = readmatrix("x_pos_data.csv");
-disp(ourData)
+%disp(ourData)
 
 %% Run the filter
 %[x_hat, P_hat, time, x_true, z_k] = kalman(dt, t_end, x0, P0, A, H, Q, R);
@@ -52,11 +56,17 @@ x_true = [ 0 0
            0.31 0.31];
 x_hat = [ 0 0
            0.31 0.31];
-P_hat = zeros([2,2]);
-x_hat_k = zeros([2,2]);
-P_hat_k = zeros([2,2]);
+P_hat_camera = zeros([2, 2]);
+P_hat_lidar = zeros([2, 2]);
 
-LR = chol(R, 'lower');
+x_hat_k = zeros([2,2]);
+P_hat_k_camera = zeros([2, 2]);
+P_hat_k_lidar = zeros([2, 2]);
+
+
+
+LR_camera = chol(R_camera, 'lower');
+LR_lidar = chol(R_lidar, 'lower');
 LQ = chol(Q, 'lower');
 
 %the x variables represent system state (like position, velocity, etc)
@@ -67,27 +77,42 @@ LQ = chol(Q, 'lower');
 %p_hat is covariance matrix which gets updated every iteration
 for k = 2:numel(time)
     %Propagate the truth state and add noise
-     disp(x_true(:, k-1))
+     %disp(x_true(:, k-1))
 
     x_true(:,k) = A*x_true(:,k-1); % + LQ*randn(size(x0));
     
 
     %Propagate the filter states
     x_hat_k(:,k) = A*x_hat(:,k-1);
-    P_hat_k(:,:,k) = A*P_hat(:,:,k-1)*A' + Q;
-    
-    %Generate a noisy measurement as a function of our true state
-%     z_k(k) = (H*x_true(:,k) - H*x_true(:, k-1)) + LR*randn(size(H,1),1); % <-- CHANGE THIS TO WHATEVER THE CAMERA IS OUTPUTTING
-    z_k(k) = ourData(k-1); % <-- CHANGE THIS TO WHATEVER THE CAMERA IS OUTPUTTING
+    P_hat_k_camera(:,:,k) = A*P_hat_camera(:,:,k-1)*A' + Q;
+    P_hat_k_lidar(:,:,k) = A*P_hat_lidar(:,:,k-1)*A' + Q;
 
-    z_hat_k = H*x_hat_k(:,k) - H*x_hat_k(:, k-1); %Predicted measurement is our expected position
-    y = z_k(k) - z_hat_k;
+    %Generate a noisy measurement as a function of our true state
+    z_k_camera(k) = (H_camera*x_true(:,k) - H_camera*x_true(:, k-1)) + LR_camera*randn(size(H_camera,1),1); % <-- CHANGE THIS TO WHATEVER THE CAMERA IS OUTPUTTING
+    z_k_lidar(k) = H_lidar*x_true(:,k) + LR_lidar*randn(size(H_lidar,1),1); % <-- CHANGE THIS TO WHATEVER THE LIDAR IS OUTPUTTING
+%     z_k(k) = ourData(k-1); % <-- CHANGE THIS TO WHATEVER THE CAMERA IS OUTPUTTING
+    disp("Lidar is printing " + z_k_lidar(k))
+
+    z_hat_k_camera = H_camera*x_hat_k(:,k) - H_camera*x_hat_k(:, k-1); %Predicted measurement is our expected position
+    z_hat_k_lidar = H_lidar*x_hat_k(:,k); %Predicted measurement is our expected position
+    y_camera = z_k_camera(k) - z_hat_k_camera;
+    y_lidar = z_k_lidar(k) - z_hat_k_lidar;
     
     %Measurement update
-    S = H*P_hat_k(:,:,k)*H' + R;
-    K = P_hat_k(:,:,k)*H'/S;
-    x_hat(:,k) = x_hat_k(:,k) + K*y;
-    P_hat(:,:,k) = (eye(size(P0)) - K*H) * P_hat_k(:,:,k);
+    S_camera = H_camera*P_hat_k_camera(:,:,k)*H_camera' + R_camera;
+    S_lidar = H_lidar*P_hat_k_lidar(:,:,k)*H_lidar' + R_lidar;
+
+    K_camera = P_hat_k_camera(:,:,k)*H_camera'/S_camera;
+    K_lidar = P_hat_k_lidar(:,:,k)*H_lidar'/S_lidar;
+
+    disp("Printing camera, then lidar)")
+    disp(z_hat_k_camera)
+    disp(z_hat_k_lidar)
+    
+    x_hat(:,k) = x_hat_k(:,k) + (K_camera*y_camera) + (K_lidar*y_lidar);
+    P_hat_camera(:,:,k) = (eye(size(P0)) - K_camera*H_camera) * P_hat_k_camera(:,:,k);
+    P_hat_lidar(:,:,k) = (eye(size(P0)) - K_lidar*H_lidar) * P_hat_k_lidar(:,:,k);
+
 end
     
 %% Plot results
@@ -107,8 +132,8 @@ figdir = fullfile('..','imgs');
 if (~exist(figdir, 'dir')), mkdir(figdir); end
 
 fmt = @(x) strip(strip(sprintf('%f',x), '0'), 'right', '.');
-sigstr = sprintf('$$\\sigma_a=%s$$, $$\\sigma_r=%s$$', fmt(sigma_a), fmt(sigma_r));
-sigstr_save = replace(sprintf('sigmaa=%s_sigmar=%s', fmt(sigma_a), fmt(sigma_r)), '.','p');
+sigstr = sprintf('$$\\sigma_a=%s$$, $$\\sigma_r=%s$$', fmt(sigma_a), fmt(sigma_r_camera));
+sigstr_save = replace(sprintf('sigmaa=%s_sigmar=%s', fmt(sigma_a), fmt(sigma_r_camera)), '.','p');
 mkdir(fullfile(figdir, sigstr_save))
 get_figname = @(x) fullfile(sigstr_save, sprintf('%s.%s', x, fig_format));
 
@@ -117,9 +142,10 @@ get_figname = @(x) fullfile(sigstr_save, sprintf('%s.%s', x, fig_format));
 f = figure('name', 'Estimated Position'); hold on;
 cmap = colormap('lines');
 plot(time, x_true(1, :), 'k', 'linewidth', 3);
-plot(time, z_k, '--', 'color', cmap(2, :), 'linewidth', 1.5);
+plot(time, z_k_camera, '--', 'color', cmap(2, :), 'linewidth', 1.5);
+plot(time, z_k_lidar, '--', 'color', cmap(2, :), 'linewidth', 1.5);
 plot(time, x_hat(1, :), 'color', cmap(1, :), 'linewidth', 3);
-legend('Truth', 'Measurement', 'Kalman')
+legend('Truth', 'Measurement (Camera)', 'Measurement (LiDAR)', 'Kalman')
 xlabel('Time (s)');
 ylabel('Position (m)');
 title(sprintf('Estimated Position (%s)', sigstr), 'interpreter', 'latex');
@@ -141,7 +167,7 @@ figname = get_figname('EstimatedVelocity');
 saveas(f, fullfile(figdir, figname));
 
 % Position Sigma Bounds / Error
-sigma_position_bound = 3 * sqrt(squeeze(P_hat(1, 1, :)));
+sigma_position_bound = 3 * sqrt(squeeze(P_hat_camera(1, 1, :)));
 f = figure('name', 'Position Error'); hold on;
 plot(time, x_hat(1, :) - x_true(1, :), 'linewidth', 2);
 plot(time, sigma_position_bound, 'k', 'linewidth', 2);
@@ -155,7 +181,7 @@ figname = get_figname('PositionError');
 saveas(f, fullfile(figdir, figname));
 
 % Velocity Sigma Bounds / Error
-sigma_velocity_bound = 3 * sqrt(squeeze(P_hat(2, 2, :)));
+sigma_velocity_bound = 3 * sqrt(squeeze(P_hat_camera(2, 2, :)));
 f = figure('name', 'Velocity Error');
 hold on;
 plot(time, x_hat(2, :) - x_true(2, :), 'linewidth', 2);
@@ -173,7 +199,7 @@ saveas(f, fullfile(figdir, figname));
 %% TESTING
 %close all
 
-diag_terms = [squeeze(P_hat(1,1, :)), squeeze(P_hat(2,2, :))];
+diag_terms = [squeeze(P_hat_camera(1,1, :)), squeeze(P_hat_camera(2,2, :))];
 %diag_terms = squeeze(P_hat(1,1, :));
 
 RSS = vecnorm(x_hat - x_true, 2, 1);
