@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# found in navigation
 
 import time
 import board
@@ -112,6 +113,7 @@ try:
         
     j = 0
     turn_detected = 0
+    obstacle = False
     while True:
         j+=1
         #collect imu normal data
@@ -129,10 +131,10 @@ try:
             #lidar_file.write(newLine)
             writer.writerow(newLine)
             
-            
             if(newLine[0] == '2' and float(newLine[1]) <= .4):
                 turn_detected += 1
                 if turn_detected == 4:
+                    write_movement(b"back,1,1.5\n")
                     write_movement(b"turn,0,045\n")
                     #3write_movement(b"forw,1,1.5\n")
                     turn_detected = 0
@@ -140,9 +142,14 @@ try:
                     ser1.reset_output_buffer()
                     ser.reset_input_buffer()
                     ser.reset_output_buffer()
+                    obstacle = True
+                    #Potentially nest this so that if there's still an object the bot turns back the other way 
                     
-            elif(newLine[0] == '2' and float(newLine[1]) >= 1):
+            elif(newLine[0] == '2' and float(newLine[1]) >= .41):
                  write_movement(b"forw,1,1.5\n")
+                 if(obstacle):
+                     write_movement(b"turn,1,045\n")
+                     obstacle = False
                  eTime = time.time()
                  while(time.time() - eTime < 1):
                      newLine = get_lidar_measurement()
