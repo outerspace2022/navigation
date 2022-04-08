@@ -2,17 +2,50 @@
 clear; close all; clc;
 rng(1337)
 
+%% Our Code: Read in camera/lidar/imu csv data
+cameraData = readmatrix("Mar30Trial4/xpos_trial4_3-30.csv");
+cameraData = cameraData(60:109,:);
+cameraData(:, 1) = cameraData(:, 1) - cameraData(1, 1); %making time start at 0
+cameraData(:, 2) = cameraData(:, 2) * -1; %invert camera measurements. since its all negative changes in position. should be positive.
+% disp(cameraData)
+
+lidarData = readmatrix("Mar30Trial4/lidar.txt");
+lidarData = lidarData(60:end,:);
+lidarData(:, 3) = lidarData(:, 3) - lidarData(1, 3);
+% disp(lidarData);
+lidar1 = lidarData(lidarData(:, 1) == 1, :);
+lidar2 = lidarData(lidarData(:, 1) == 2, :);
+% disp(lidar1);
+% disp(lidar2);
+
+imuData = readmatrix("Mar30Trial4/imu_normal.txt");
+imuData = imuData(551:end, :);
+imuData(:, 1) = imuData(:, 1) - imuData(1, 1);
+%calculate trailing mean, clumping past 10 data points
+trail = 10;
+imuData(:, 2) = movmean(imuData(:, 2), [trail 0]);
+imuData(:, 3) = movmean(imuData(:, 3), [trail 0]);
+imuData(:, 4) = movmean(imuData(:, 4), [trail 0]);
+imuData(:, 5) = movmean(imuData(:, 5), [trail 0]);
+imuData(:, 6) = movmean(imuData(:, 6), [trail 0]);
+imuData(:, 7) = movmean(imuData(:, 7), [trail 0]);
+% disp(imuData)
+
+
 %% Define the initial states
 % Here, we start at position zero with velocity +1m/s and absolute
 % certainty about our initial state
-x0 = [0 0.31]';
+x0 = [0 0.10824]';
 P0 = diag([1e-4, 1e-6]);
 
-dt = 0.050;  % Update once per 0.050 second (camera freq)
-t_end = 41 * 0.05;  % Simulate for 100 seconds
+% dt = 0.050;  % Update once per 0.050 second (camera freq)
+dt = 0.10 % but its not actually always 0.10!!!! (camera timestamp hz)
+t_end = 4.9;  % Simulate for ~4.9 seconds (duration of trial)
 
 steps = t_end/dt;
-time = linspace(0,t_end,steps);
+% time = linspace(0,t_end,steps);
+time = cameraData(:, 1);
+% disp(time)
 
 %% Define A, Q, and R matrices
 sigma_a = 1;  % [m/s^2] Process noise standard deviation
@@ -52,9 +85,7 @@ sigma_r_lidar = 0.05; %arbitrary value. change this !!!!
 % safe to assume the measurement noises are independent, hence the off-diagonal terms are 0.
 R = diag([sigma_r_camera^2, sigma_r_lidar^2]); % 2x2 measurement covariance
 
-%% Our Code: Read in camera csv data
-%ourData = readmatrix("x_pos_data.csv");
-%disp(ourData)
+
 
 %% Run the filter
 %[x_hat, P_hat, time, x_true, z_k] = kalman(dt, t_end, x0, P0, A, H, Q, R);
@@ -79,8 +110,36 @@ for k = 2:numel(time)
     %Propagate the truth state and add noise
     %disp(x_true(:, k-1))
     
-    x_true(:, k) = A * x_true(:, k-1); % + LQ*randn(size(x0)); % should add process noise but this is OK
+    %finds the closest lidar timestamp to the camera timestamp
+    disp("Dealing with time")
+    disp(time(k))
+    [~, closest_lidar1_index] = min(abs(lidar1(:, 3) - cameraData(k, 1)));
+    [~, closest_lidar2_index] = min(abs(lidar2(:, 3) - cameraData(k, 1)));
+    closest_lidar1_timestamp = lidar1(closest_lidar1_index, 3);
+    closest_lidar2_timestamp = lidar2(closest_lidar2_index, 3);
+
+    closest_lidar1_measurement = lidar1(closest_lidar1_index, 2);
+    closest_lidar2_measurement = lidar2(closest_lidar2_index, 2);
+
+%     disp("Closest lidar time stamp is")
+%     disp(closest_lidar1_timestamp);
+%     disp(closest_lidar2_timestamp);
+
+%     disp("lidar data is ");
+%     disp(closest_lidar1_measurement);
+%     disp(closest_lidar2_measurement);
+
+
+    %finding nearest imu timestamp
+%     [~, closest_imu_index] = min(abs(imuData(:, 1) - cameraData(k, 1)));
+%     closest_imu_timestamp = imuData(closest_imu_index, 1);
+%     closest_imu_measurement = imuData(closest_imu_index, :);
+%     disp("closest imu timestamp is ");
+%     disp(closest_imu_measurement);
+
     
+    x_true(:, k) = A * x_true(:, k-1);% + LQ*randn(size(x0)); % should add process noise but this is OK
+
     % =========== Propagate the filter states ===========
     x_hat(:, k) = A * x_hat(:, k-1); % predicted state
     P_hat(:, :, k) = A * P_hat(:, :, k-1) * A' + Q; % estimated covariance of predicted state
@@ -89,31 +148,31 @@ for k = 2:numel(time)
     % The measurement vector is [camera; lidar]
     
     % Camera
-    z(1, k) = H_camera * x_true(:, k); % <-- CHANGE THIS TO WHATEVER THE CAMERA IS OUTPUTTING
+%     z(1, k) = H_camera * x_true(:, k); % <-- CHANGE THIS TO WHATEVER THE CAMERA IS OUTPUTTING
+    z(1, k) = cameraData(k, 2);
     z(2, k) = H_lidar * x_true(:, k); % <-- CHANGE THIS TO WHATEVER THE LIDAR IS OUTPUTTING
-    
 
 
     % Usually we just do H * x_true, but I left this as two steps for clarity
     z(:, k) = z(:, k) + LR * randn(length(x0), 1); % measurement noise term, generated using cholesky decomp of measurement covariance
-    
-    %     z_k(k) = ourData(k-1); % <-- CHANGE THIS TO WHATEVER THE CAMERA IS OUTPUTTING
-    
+        
     % =================== Predicted measurements ===================
     z_hat(1) = H_camera * x_hat(:, k); %Predicted measurement is our DELTA position
     z_hat(2) = H_lidar * x_hat(:, k); %Predicted measurement is our position
     y = z(:, k) - z_hat; % we call this the "innovation" since it is essentially the new information
     
+% 
+%     if (mod(k, 2) == 0) 
+%         y(2) = 0;
+% %         z(2, k) = 0;
+%     end
+    y(2) = 0;
 
-    if (mod(k, 2) == 0) 
-        y(2) = 0;
-%         z(2, k) = 0;
-    end
     % =================== Measurement update ===================
     S = H * P_hat(:, :, k) * H' + R;
     K = P_hat(:, :, k) * H' / S;
     
-    fprintf('Camera: %8.3f \t Lidar: %10.5f\n', z(1, k), z(2, k)) % print the actual measurements
+%     fprintf('Camera: %8.3f \t Lidar: %10.5f\n', z(1, k), z(2, k)) % print the actual measurements
     
     x_hat(:, k) = x_hat(:, k) + (K * y);
     P_hat(:, :, k) = (eye(size(P0)) - K * H) * P_hat(:, :, k);
