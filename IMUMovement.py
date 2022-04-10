@@ -46,7 +46,7 @@ tstart = time.time()
 state = np.array((0, 0, 0, 0, 0, 0, 0)) #time, velx, vely, velz, gyro angles xyz
 
 #write file headers
-lidar_file.write("LiDAR','Distance (m)', 'Time (s)")
+lidar_file.write("LiDAR','Distance (m)', 'Time (s)\n")
 imu_raw_file.write("timestamp,accX,accY,accZ,gyroX,gyroY,gyroZ\n")
 imu_normal_file.write("timestamp,accX,accY,accZ,gyroX,gyroY,gyroZ\n")
 imu_state_file.write("timestamp,velX,velY,velZ,gyroXdrift,gyroYdrift,gyroZdrift\n")
