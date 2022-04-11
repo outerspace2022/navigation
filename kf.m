@@ -22,13 +22,13 @@ imuData = readmatrix("Mar30Trial4/imu_normal.txt");
 imuData = imuData(551:end, :);
 imuData(:, 1) = imuData(:, 1) - imuData(1, 1);
 %calculate trailing mean, clumping past 10 data points
-trail = 10;
-imuData(:, 2) = movmean(imuData(:, 2), [trail 0]);
-imuData(:, 3) = movmean(imuData(:, 3), [trail 0]);
-imuData(:, 4) = movmean(imuData(:, 4), [trail 0]);
-imuData(:, 5) = movmean(imuData(:, 5), [trail 0]);
-imuData(:, 6) = movmean(imuData(:, 6), [trail 0]);
-imuData(:, 7) = movmean(imuData(:, 7), [trail 0]);
+% trail = 10;
+% imuData(:, 2) = movmean(imuData(:, 2), [trail 0]);
+% imuData(:, 3) = movmean(imuData(:, 3), [trail 0]);
+% imuData(:, 4) = movmean(imuData(:, 4), [trail 0]);
+% imuData(:, 5) = movmean(imuData(:, 5), [trail 0]);
+% imuData(:, 6) = movmean(imuData(:, 6), [trail 0]);
+% imuData(:, 7) = movmean(imuData(:, 7), [trail 0]);
 % disp(imuData)
 
 
@@ -48,7 +48,7 @@ time = cameraData(:, 1);
 % disp(time)
 
 %% Define A, Q, and R matrices
-sigma_a = 1;  % [m/s^2] Process noise standard deviation
+sigma_a = 0.05;  % [m/s^2] Process noise standard deviation
 
 A = [1, dt; 0, 1]; % state transition matrix
 
@@ -106,13 +106,14 @@ LQ = chol(Q, 'lower');
 %p_hat is covariance matrix which gets updated every iteration
 z = zeros(2, numel(time));
 z_hat = zeros(2, 1);
+[~, last_imu_index] = min(abs(imuData(:, 1) - cameraData(2, 1)));
 for k = 2:numel(time)
     %Propagate the truth state and add noise
     %disp(x_true(:, k-1))
     
     %finds the closest lidar timestamp to the camera timestamp
-    disp("Dealing with time")
-    disp(time(k))
+%     disp("Dealing with time")
+%     disp(time(k))
     [~, closest_lidar1_index] = min(abs(lidar1(:, 3) - cameraData(k, 1)));
     [~, closest_lidar2_index] = min(abs(lidar2(:, 3) - cameraData(k, 1)));
     closest_lidar1_timestamp = lidar1(closest_lidar1_index, 3);
@@ -131,14 +132,21 @@ for k = 2:numel(time)
 
 
     %finding nearest imu timestamp
-%     [~, closest_imu_index] = min(abs(imuData(:, 1) - cameraData(k, 1)));
-%     closest_imu_timestamp = imuData(closest_imu_index, 1);
-%     closest_imu_measurement = imuData(closest_imu_index, :);
+    [~, closest_imu_index] = min(abs(imuData(:, 1) - cameraData(k, 1)));
+    closest_imu_timestamp = imuData(closest_imu_index, 1);
+    closest_imu_measurement = imuData(closest_imu_index, :);
 %     disp("closest imu timestamp is ");
 %     disp(closest_imu_measurement);
+%     disp(closest_imu_index);
 
+%     disp("the second to recent one is ");
+%     disp(imuData(last_imu_index, :));
+%     disp(last_imu_index);
+
+    rolling_imu_measurement = mean(imuData([last_imu_index:closest_imu_index], :));
+%     disp(rolling_imu_measurement);
     
-    x_true(:, k) = A * x_true(:, k-1);% + LQ*randn(size(x0)); % should add process noise but this is OK
+    x_true(:, k) = A * x_true(:, k-1) + LQ*randn(size(x0)); % should add process noise but this is OK
 
     % =========== Propagate the filter states ===========
     x_hat(:, k) = A * x_hat(:, k-1); % predicted state
@@ -150,23 +158,19 @@ for k = 2:numel(time)
     % Camera
 %     z(1, k) = H_camera * x_true(:, k); % <-- CHANGE THIS TO WHATEVER THE CAMERA IS OUTPUTTING
     z(1, k) = cameraData(k, 2);
-    z(2, k) = H_lidar * x_true(:, k); % <-- CHANGE THIS TO WHATEVER THE LIDAR IS OUTPUTTING
-
+%     z(2, k) = H_lidar * x_true(:, k); % <-- CHANGE THIS TO WHATEVER THE LIDAR IS OUTPUTTING
+    z(2, k) = 1.00 - closest_lidar2_measurement; %inverted because position = inverse of lidar distance away from front object
 
     % Usually we just do H * x_true, but I left this as two steps for clarity
     z(:, k) = z(:, k) + LR * randn(length(x0), 1); % measurement noise term, generated using cholesky decomp of measurement covariance
         
     % =================== Predicted measurements ===================
     z_hat(1) = H_camera * x_hat(:, k); %Predicted measurement is our DELTA position
-    z_hat(2) = H_lidar * x_hat(:, k); %Predicted measurement is our position
+    z_hat(2) = (H_lidar * x_hat(:, k)); %Predicted measurement is our position
     y = z(:, k) - z_hat; % we call this the "innovation" since it is essentially the new information
     
-% 
-%     if (mod(k, 2) == 0) 
-%         y(2) = 0;
-% %         z(2, k) = 0;
-%     end
-    y(2) = 0;
+%     y(1) = 0;
+%     y(2) = 0;
 
     % =================== Measurement update ===================
     S = H * P_hat(:, :, k) * H' + R;
@@ -176,6 +180,9 @@ for k = 2:numel(time)
     
     x_hat(:, k) = x_hat(:, k) + (K * y);
     P_hat(:, :, k) = (eye(size(P0)) - K * H) * P_hat(:, :, k);
+
+
+    last_imu_index = closest_imu_index;
 end
 
 %% Plot results
