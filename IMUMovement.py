@@ -134,8 +134,8 @@ try:
             if(newLine[0] == '2' and float(newLine[1]) <= .4):
                 turn_detected += 1
                 if turn_detected == 4:
-                    write_movement(b"back,1,1.5\n")
-                    write_movement(b"turn,0,045\n")
+                    write_movement(b"back,1,1.5,200\n")
+                    write_movement(b"turn,0,060,200\n")
                     #3write_movement(b"forw,1,1.5\n")
                     turn_detected = 0
                     ser1.reset_input_buffer()
@@ -146,9 +146,12 @@ try:
                     #Potentially nest this so that if there's still an object the bot turns back the other way 
                     
             elif(newLine[0] == '2' and float(newLine[1]) >= .41):
-                 write_movement(b"forw,1,1.5\n")
                  if(obstacle):
-                     write_movement(b"turn,1,045\n")
+                     write_movement(b"forw,2,1.5,200\n")
+                 else:
+                     write_movement(b"forw,1,1.5,200\n")
+                 if(obstacle):
+                     write_movement(b"turn,1,070,200\n")
                      obstacle = False
                  eTime = time.time()
                  while(time.time() - eTime < 1):
