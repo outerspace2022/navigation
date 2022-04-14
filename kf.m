@@ -51,6 +51,7 @@ time = cameraData(:, 1);
 sigma_a = 0.01;  % [m/s^2] Process noise standard deviation
 
 A = [1, dt; 0, 1]; % state transition matrix
+A_imu = [0.5 * dt * dt; dt];
 
 % Q quantifies the uncertainty added from process noise in the system
 % Recall that our model assumes process noise in the state propagation:
@@ -62,7 +63,8 @@ A = [1, dt; 0, 1]; % state transition matrix
 % tuning parameter to increase or decrease the amount of process noise
 % modeled in our filter.
 G = [0.5 * dt ^ 2 dt]';
-Q = diag(G.^2) * sigma_a^2;
+% Q = diag(G.^2) * sigma_a^2; % should be imu std???
+Q = 0.5; % estimated imu std
 
 %% Define Measurement matrices (H, R)
 H_camera = [0, dt]; % The camera is measuring CHANGE in position, which is essentially velocity.
@@ -143,22 +145,22 @@ for k = 2:numel(time)
 %     disp(imuData(last_imu_index, :));
 %     disp(last_imu_index);
 
-    rolling_imu_measurement = mean(imuData([last_imu_index:closest_imu_index], :));
+    rolling_imu_measurement = mean(imuData([last_imu_index:closest_imu_index], :))
 %     disp(rolling_imu_measurement);
     
     x_true(:, k) = A * x_true(:, k-1) + LQ*randn(size(x0)); % should add process noise but this is OK
 
     % =========== Propagate the filter states ===========
-    x_hat(:, k) = A * x_hat(:, k-1); % predicted state
+%     x_hat(:, k) = A * x_hat(:, k-1); % predicted state
+    x_hat(:, k) = A * x_hat(:, k-1) + A_imu * 0; % predicted state. REPLACE 0 with actual imu acc IN THE DIRECTION
+
     P_hat(:, :, k) = A * P_hat(:, :, k-1) * A' + Q; % estimated covariance of predicted state
     
     % =========== Generate a noisy measurement as a function of our true state ===========
     % The measurement vector is [camera; lidar]
     
     % Camera
-%     z(1, k) = H_camera * x_true(:, k); % <-- CHANGE THIS TO WHATEVER THE CAMERA IS OUTPUTTING
     z(1, k) = cameraData(k, 2);
-%     z(2, k) = H_lidar * x_true(:, k); % <-- CHANGE THIS TO WHATEVER THE LIDAR IS OUTPUTTING
     z(2, k) = 1.00 - closest_lidar2_measurement; %inverted because position = inverse of lidar distance away from front object
 
     % Usually we just do H * x_true, but I left this as two steps for clarity
