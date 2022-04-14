@@ -48,7 +48,7 @@ time = cameraData(:, 1);
 % disp(time)
 
 %% Define A, Q, and R matrices
-sigma_a = 0.05;  % [m/s^2] Process noise standard deviation
+sigma_a = 0.01;  % [m/s^2] Process noise standard deviation
 
 A = [1, dt; 0, 1]; % state transition matrix
 
@@ -211,7 +211,7 @@ get_figname = @(x) fullfile(sigstr_save, sprintf('%s.%s', x, fig_format));
 % ============= Position =============
 f = figure('name', 'Estimated Position'); hold on;
 cmap = colormap('lines');
-plot(time, x_true(1, :), 'k', 'linewidth', 3, 'DisplayName', 'Truth');
+plot(time, x_true(1, :), 'k', 'linewidth', 3, 'DisplayName', 'Ideal'); %Changed "Truth" to "Ideal"
 plot(time, x_hat(1, :), 'linewidth', 3, 'DisplayName', 'Kalman Filter');
 plot(time, z(2, :), '.', 'linewidth', 1.5, 'DisplayName', 'Lidar Measurement');
 legend('Location', 'northwest')
