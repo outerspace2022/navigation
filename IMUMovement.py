@@ -24,7 +24,7 @@ useCamera = True
 useMovement = True
 
 
-foldername = "April25Test1"
+foldername = "April28Test1"
 root = "../" + foldername + "/"
 
 lidar_filename = root + "lidar.txt"
@@ -92,7 +92,7 @@ def write_movement(cmd):
         ser1.write(cmd)
         line2 = ser1.readline().decode('utf-8').rstrip()
         print(line2)
-        time.sleep(1)
+        #time.sleep(1)
         
     return
 
@@ -131,6 +131,9 @@ try:
         current_timestamp = time.time() - t0
         #print(current_timestamp)
         
+                
+        print("about to collect imu");
+        print(time.time() - t0);
         #collect imu normal data
         values = get_imu_measurement() - offset
         #state = values * (values[0]-prev_time) + state
@@ -141,6 +144,10 @@ try:
         #prev_time = values[0]
         
         #collect lidar data
+        
+        print("about to collect lidar");
+        print(time.time() - t0);
+        
         if (useLidar and ser.in_waiting > 0):
             newLine = get_lidar_measurement()
             newLine.append(current_timestamp)
@@ -174,17 +181,31 @@ try:
                  if(obstacle):
                      write_movement(b"turn,1,070,200\n")
                      obstacle = False
-                 eTime = time.time()
-                 while(time.time() - eTime < 1): #used to be a while loop
+                     
+                 if (ser.in_waiting > 0):
                      newLine = get_lidar_measurement()
-                     newLine.append(current_timestamp)
+                     newLine.append(time.time() - t0)
+                         #newLine.append(current_timestamp)
                      print(newLine)
                      writer.writerow(newLine)
                      
+                 ser1.reset_input_buffer()
+                 ser1.reset_output_buffer()
+                 ser.reset_input_buffer()
+                 ser.reset_output_buffer()
+                     
+                     
+                     
         #get camera data
+                             
+        
         if (useCamera):
+            print("about to collect camera");
+            print(time.time() - t0);
             camera_data = get_camera_measurement()
+            
             if (camera_data != ""):
+                print("cam;klsdfaj;f")
                 #print(camera_data)
                 camera_file.write(str(current_timestamp) + "," + str(camera_data))
 
