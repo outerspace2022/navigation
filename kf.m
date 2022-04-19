@@ -35,11 +35,13 @@ imuData(:, 1) = imuData(:, 1) - imuData(1, 1);
 %% Define the initial states
 % Here, we start at position zero with velocity +1m/s and absolute
 % certainty about our initial state
-x0 = [0 0.10824]';
-P0 = diag([1e-4, 1e-6]);
+I1 = eye(1);
+I2 = eye(2);
+x0 = [0 0 0 0.10824]'; %[posX posY velX velY]
+P0 = diag([1e-4, 1e-4, 1e-6, 1e-6]);
 
 % dt = 0.050;  % Update once per 0.050 second (camera freq)
-dt = 0.10 % but its not actually always 0.10!!!! (camera timestamp hz)
+dt = 0.10; % but its not actually always 0.10!!!! (camera timestamp hz)
 t_end = 4.9;  % Simulate for ~4.9 seconds (duration of trial)
 
 steps = t_end/dt;
@@ -49,10 +51,22 @@ time = cameraData(:, 1);
 
 %% Define A, Q, and R matrices
 sigma_a = 0.01;  % [m/s^2] Process noise standard deviation
+    % TODO should be std of IMU
 
-A = [1, dt; 0, 1]; % state transition matrix
-A_imu = [0.5 * dt * dt; dt];
 
+
+% A = [I2, dt*I2; 0*I2, I2]; % state transition matrix
+A = [1 0 dt 0;
+     0 1 0 dt;
+     0 0 1 0;
+     0 0 0 1];
+
+A_imu = [0.5 * dt * dt 0;
+        0 0.5 * dt * dt;
+        dt 0;
+        0 dt];
+
+disp(A_imu)
 % Q quantifies the uncertainty added from process noise in the system
 % Recall that our model assumes process noise in the state propagation:
 %       x_k|k-1 = A_k * x_k-1 + w_k   (Equation 11 from the slides)
@@ -62,14 +76,22 @@ A_imu = [0.5 * dt * dt; dt];
 % our position and velocity states. In this way, sigma_a can be used as a
 % tuning parameter to increase or decrease the amount of process noise
 % modeled in our filter.
-G = [0.5 * dt ^ 2 dt]';
-% Q = diag(G.^2) * sigma_a^2; % should be imu std???
-Q = 0.5; % estimated imu std
+G = [0.5 * dt ^ 2 0.5 * dt ^ 2 dt dt]';
+Q = diag(G.^2) * sigma_a^2; % should be imu std???
+% Q = 0.5; % estimated imu std
+
 
 %% Define Measurement matrices (H, R)
-H_camera = [0, dt]; % The camera is measuring CHANGE in position, which is essentially velocity.
-H_lidar = [1, 0]; % The lidar measures position
-H = [H_camera; H_lidar];
+H_camera_x = [0, 0, dt, 0]; % The camera is measuring CHANGE in position, which is essentially velocity.
+H_camera_y = [0, 0, 0, dt];
+    %TODO instead of dt and 0, should be cosine equations based off
+    %orientation
+
+H_lidar_x = [1, 0, 0, 0]; % The lidar measures position
+H_lidar_y = [0, 1, 0, 0];
+    %TODO cosines instead of 0 1
+
+H = [H_camera_x; H_camera_y; H_lidar_x; H_lidar_y];
 
 % ===================== Sigmas ====================
 % R quantifies the uncertainty in our sensor measurements. Recall that
@@ -85,7 +107,9 @@ sigma_r_lidar = 0.05; %arbitrary value. change this !!!!
 % The camera noise is sigma_r_camera, and the lidar noise is sigma_r_lidar. We have 2 measurements,
 % so the measurement covariance is 2x2. In general, unless you have reason to know better, it is
 % safe to assume the measurement noises are independent, hence the off-diagonal terms are 0.
-R = diag([sigma_r_camera^2, sigma_r_lidar^2]); % 2x2 measurement covariance
+% R = diag([sigma_r_camera^2, sigma_r_lidar^2]); % 2x2 measurement covariance
+R = diag([sigma_r_lidar^2, sigma_r_lidar^2, sigma_r_camera^2, sigma_r_camera^2]);
+    %TODO should be cosine of orientation
 
 
 
@@ -94,7 +118,7 @@ R = diag([sigma_r_camera^2, sigma_r_lidar^2]); % 2x2 measurement covariance
 % x_true = zeros([2,2]);
 x_true = x0; % initialize truth to
 x_hat = x0;
-P_hat = zeros(2, 2, numel(time)); % pre-allocate
+P_hat = zeros(4, 4, numel(time)); % pre-allocate
 P_hat(:, :, 1) = P0; % initial covariance
 
 LR = chol(R, 'lower'); % used for generating noise
@@ -106,8 +130,8 @@ LQ = chol(Q, 'lower');
 %z_hat is predicted sensor measurement
 %x_hat is predicted state based off previous state
 %p_hat is covariance matrix which gets updated every iteration
-z = zeros(2, numel(time));
-z_hat = zeros(2, 1);
+z = zeros(4, numel(time));
+z_hat = zeros(4, 1);
 [~, last_imu_index] = min(abs(imuData(:, 1) - cameraData(2, 1)));
 for k = 2:numel(time)
     %Propagate the truth state and add noise
@@ -145,30 +169,43 @@ for k = 2:numel(time)
 %     disp(imuData(last_imu_index, :));
 %     disp(last_imu_index);
 
-    rolling_imu_measurement = mean(imuData([last_imu_index:closest_imu_index], :))
+    rolling_imu_measurement = mean(imuData([last_imu_index:closest_imu_index], :));
 %     disp(rolling_imu_measurement);
     
     x_true(:, k) = A * x_true(:, k-1) + LQ*randn(size(x0)); % should add process noise but this is OK
 
     % =========== Propagate the filter states ===========
 %     x_hat(:, k) = A * x_hat(:, k-1); % predicted state
-    x_hat(:, k) = A * x_hat(:, k-1) + A_imu * 0; % predicted state. REPLACE 0 with actual imu acc IN THE DIRECTION
+%     disp(A_imu * [0; 0])
 
+    x_hat(:, k) = A * x_hat(:, k-1) + A_imu * [0; 0] % predicted state. REPLACE 0 with actual imu acc IN THE DIRECTION
+%     print(x_hat(:, k));
+
+    disp("1111")
     P_hat(:, :, k) = A * P_hat(:, :, k-1) * A' + Q; % estimated covariance of predicted state
     
+    disp("555")
     % =========== Generate a noisy measurement as a function of our true state ===========
     % The measurement vector is [camera; lidar]
     
     % Camera
-    z(1, k) = cameraData(k, 2);
-    z(2, k) = 1.00 - closest_lidar2_measurement; %inverted because position = inverse of lidar distance away from front object
+    z(1, k) = 0; %TODO
+    z(2, k) = cameraData(k, 2);
+    z(3, k) = 0; %TODO split measurements based off cosine
+    z(4, k) = 1.00 - closest_lidar2_measurement; %inverted because position = inverse of lidar distance away from front object
 
     % Usually we just do H * x_true, but I left this as two steps for clarity
-    z(:, k) = z(:, k) + LR * randn(length(x0), 1); % measurement noise term, generated using cholesky decomp of measurement covariance
+%     z(:, k) = z(:, k) + LR * randn(length(x0), 1); % measurement noise term, generated using cholesky decomp of measurement covariance
         
     % =================== Predicted measurements ===================
-    z_hat(1) = H_camera * x_hat(:, k); %Predicted measurement is our DELTA position
-    z_hat(2) = (H_lidar * x_hat(:, k)); %Predicted measurement is our position
+%     z_hat(1) = 0; %Predicted measurement is our DELTA position
+%     z_hat(2) = H_camera_y * x_hat(:, k); %Predicted measurement is our DELTA position
+%     z_hat(3) = 0; %Predicted measurement is our position
+%     z_hat(4) = (H_lidar_y * x_hat(:, k)); %Predicted measurement is our position
+
+    z_hat = H * x_hat(:, k);
+
+
     y = z(:, k) - z_hat; % we call this the "innovation" since it is essentially the new information
     
 %     y(1) = 0;
@@ -213,9 +250,9 @@ get_figname = @(x) fullfile(sigstr_save, sprintf('%s.%s', x, fig_format));
 % ============= Position =============
 f = figure('name', 'Estimated Position'); hold on;
 cmap = colormap('lines');
-plot(time, x_true(1, :), 'k', 'linewidth', 3, 'DisplayName', 'Ideal'); %Changed "Truth" to "Ideal"
-plot(time, x_hat(1, :), 'linewidth', 3, 'DisplayName', 'Kalman Filter');
-plot(time, z(2, :), '.', 'linewidth', 1.5, 'DisplayName', 'Lidar Measurement');
+plot(time, x_true(2, :), 'k', 'linewidth', 3, 'DisplayName', 'Ideal (Y)'); %Changed "Truth" to "Ideal"
+plot(time, x_hat(2, :), 'linewidth', 3, 'DisplayName', 'Kalman Filter (Y)');
+plot(time, z(4, :), '.', 'linewidth', 1.5, 'DisplayName', 'Lidar Measurement (Y)');
 legend('Location', 'northwest')
 xlabel('Time (s)');
 ylabel('Position (m)');
