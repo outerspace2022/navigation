@@ -21,15 +21,7 @@ lidar2 = lidarData(lidarData(:, 1) == 2, :);
 imuData = readmatrix("Mar30Trial4/imu_normal.txt");
 imuData = imuData(551:end, :);
 imuData(:, 1) = imuData(:, 1) - imuData(1, 1);
-%calculate trailing mean, clumping past 10 data points
-% trail = 10;
-% imuData(:, 2) = movmean(imuData(:, 2), [trail 0]);
-% imuData(:, 3) = movmean(imuData(:, 3), [trail 0]);
-% imuData(:, 4) = movmean(imuData(:, 4), [trail 0]);
-% imuData(:, 5) = movmean(imuData(:, 5), [trail 0]);
-% imuData(:, 6) = movmean(imuData(:, 6), [trail 0]);
-% imuData(:, 7) = movmean(imuData(:, 7), [trail 0]);
-% disp(imuData)
+
 
 
 %% Define the initial states
@@ -66,7 +58,8 @@ A_imu = [0.5 * dt * dt 0;
         dt 0;
         0 dt];
 
-disp(A_imu)
+% disp(A_imu);
+
 % Q quantifies the uncertainty added from process noise in the system
 % Recall that our model assumes process noise in the state propagation:
 %       x_k|k-1 = A_k * x_k-1 + w_k   (Equation 11 from the slides)
@@ -178,13 +171,13 @@ for k = 2:numel(time)
 %     x_hat(:, k) = A * x_hat(:, k-1); % predicted state
 %     disp(A_imu * [0; 0])
 
-    x_hat(:, k) = A * x_hat(:, k-1) + A_imu * [0; 0] % predicted state. REPLACE 0 with actual imu acc IN THE DIRECTION
+    x_hat(:, k) = A * x_hat(:, k-1) + A_imu * [0; 0]; % predicted state. REPLACE 0 with actual imu acc IN THE DIRECTION
 %     print(x_hat(:, k));
 
-    disp("1111")
+%     disp("1111")
     P_hat(:, :, k) = A * P_hat(:, :, k-1) * A' + Q; % estimated covariance of predicted state
     
-    disp("555")
+%     disp("555")
     % =========== Generate a noisy measurement as a function of our true state ===========
     % The measurement vector is [camera; lidar]
     
@@ -247,12 +240,26 @@ mkdir(fullfile(figdir, sigstr_save))
 get_figname = @(x) fullfile(sigstr_save, sprintf('%s.%s', x, fig_format));
 
 
-% ============= Position =============
-f = figure('name', 'Estimated Position'); hold on;
+% ============= Position Y Axis=============
+f = figure('name', 'Estimated Position (Y)'); hold on;
 cmap = colormap('lines');
 plot(time, x_true(2, :), 'k', 'linewidth', 3, 'DisplayName', 'Ideal (Y)'); %Changed "Truth" to "Ideal"
 plot(time, x_hat(2, :), 'linewidth', 3, 'DisplayName', 'Kalman Filter (Y)');
 plot(time, z(4, :), '.', 'linewidth', 1.5, 'DisplayName', 'Lidar Measurement (Y)');
+legend('Location', 'northwest')
+xlabel('Time (s)');
+ylabel('Position (m)');
+title(sprintf('Estimated Position (%s)', sigstr), 'interpreter', 'latex');
+box on; grid on;
+figname = get_figname('EstimatedPosition');
+print(f, fullfile(figdir, figname), '-dpng', '-r300');
+
+% ============= Position X Axis=============
+f = figure('name', 'Estimated Position (X)'); hold on;
+cmap = colormap('lines');
+plot(time, x_true(1, :), 'k', 'linewidth', 3, 'DisplayName', 'Ideal (X)'); %Changed "Truth" to "Ideal"
+plot(time, x_hat(1, :), 'linewidth', 3, 'DisplayName', 'Kalman Filter (X)');
+plot(time, z(3, :), '.', 'linewidth', 1.5, 'DisplayName', 'Lidar Measurement (X)');
 legend('Location', 'northwest')
 xlabel('Time (s)');
 ylabel('Position (m)');
