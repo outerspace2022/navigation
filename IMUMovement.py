@@ -21,10 +21,10 @@ PI = math.pi
 
 useLidar = True #For debugging
 useCamera = True
-useMovement = False
+useMovement = True
 
 
-foldername = "April13Test1"
+foldername = "April25Test1"
 root = "../" + foldername + "/"
 
 lidar_filename = root + "lidar.txt"
@@ -54,7 +54,7 @@ t_start_calibrate = time.time()
 state = np.array((0, 0, 0, 0, 0, 0, 0)) #time, velx, vely, velz, gyro angles xyz
 
 #write file headers
-lidar_file.write("LiDAR','Distance (m)', 'Time (s)\n")
+writer.writerow("LiDAR','Distance (m)', 'Time (s)\n")
 imu_raw_file.write("timestamp,accX,accY,accZ,gyroX,gyroY,gyroZ\n")
 imu_normal_file.write("timestamp,accX,accY,accZ,gyroX,gyroY,gyroZ\n")
 imu_state_file.write("timestamp,velX,velY,velZ,gyroXdrift,gyroYdrift,gyroZdrift\n")
@@ -114,11 +114,11 @@ try:
         # TODO: This address occasionally changes when we plug/unplug the arduino
         # If this isn't working run "ls /dev/ttyA*" and use that address
         # It will NOT be AMA0
-        ser = serial.Serial('/dev/ttyACM0', 9600, timeout=1)
+        ser = serial.Serial('/dev/ttyACM0', 9600, timeout=0)
         ser.reset_input_buffer()
         
     if (useMovement):
-        ser1 = serial.Serial('/dev/ttyACM1', 9600, timeout=1)
+        ser1 = serial.Serial('/dev/ttyACM1', 9600, timeout=0)
         ser1.reset_input_buffer()
         
     j = 0
@@ -143,10 +143,11 @@ try:
         #collect lidar data
         if (useLidar and ser.in_waiting > 0):
             newLine = get_lidar_measurement()
+            newLine.append(current_timestamp)
             print(newLine)
             #lidar_file.write(newLine)
             
-            newLine.append(current_timestamp)
+           # newLine.append(current_timestamp)
             writer.writerow(newLine)
             
             if(newLine[0] == '2' and float(newLine[1]) <= .4):
@@ -156,11 +157,13 @@ try:
                     write_movement(b"turn,0,060,200\n")
                     #3write_movement(b"forw,1,1.5\n")
                     turn_detected = 0
+                    obstacle = True
+            
                     ser1.reset_input_buffer()
                     ser1.reset_output_buffer()
                     ser.reset_input_buffer()
                     ser.reset_output_buffer()
-                    obstacle = True
+                    
                     #Potentially nest this so that if there's still an object the bot turns back the other way 
                     
             elif(newLine[0] == '2' and float(newLine[1]) >= .41):
@@ -172,8 +175,9 @@ try:
                      write_movement(b"turn,1,070,200\n")
                      obstacle = False
                  eTime = time.time()
-                 while(time.time() - eTime < 1):
+                 while(time.time() - eTime < 1): #used to be a while loop
                      newLine = get_lidar_measurement()
+                     newLine.append(current_timestamp)
                      print(newLine)
                      writer.writerow(newLine)
                      
@@ -181,7 +185,7 @@ try:
         if (useCamera):
             camera_data = get_camera_measurement()
             if (camera_data != ""):
-                print(camera_data)
+                #print(camera_data)
                 camera_file.write(str(current_timestamp) + "," + str(camera_data))
 
 
