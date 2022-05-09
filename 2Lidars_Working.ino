@@ -40,14 +40,13 @@ void loop() {
   newDistance1 = myLIDAR1.getDistance();
   newDistance3 = myLIDAR3.getDistance();
 
-  //Print to Serial port
-  Serial.print("LIDAR 1 distance: ");
-  Serial.print(newDistance1/100);
-  Serial.println(" m");
 
-  Serial.print("LIDAR 3 distance: ");
-  Serial.print(newDistance3/100);
-  Serial.println(" m");
+  Serial.print("1,");
+  Serial.println(newDistance1/100);
 
-  delay(20); //Don't hammer too hard on the I2C bus
+  Serial.print("2,");
+  Serial.println(newDistance3/100);
+
+  delay(200); //Don't hammer too hard on the I2C bus, used to be 20
+
 }
